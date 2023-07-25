@@ -2,12 +2,17 @@ require("dotenv").config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-
+const connectDb = require("./connection/dbConnection");
+const Payment = require("./models/paymentmodel");
 const app = express();
 
 app.use(express.json());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }))
+
+//Mongodb connection
+connectDb()
+
 
 //routes
 //test endpoint to see if the generate token function works
@@ -63,7 +68,7 @@ app.post('/mpesa',generateToken, async (req, res) => {
             PartyA: `254${phone}`,
             PartyB: shortCode,
             PhoneNumber: `254${phone}`,
-            CallBackURL: "https://mydomain.com/pat",
+            CallBackURL: "https://27f8-197-237-80-19.ngrok.io/callback",
             AccountReference: `254${phone}`,
             TransactionDesc: "Test"
         },
@@ -82,6 +87,33 @@ app.post('/mpesa',generateToken, async (req, res) => {
 
 });
 
+app.post("/callback",(req,res)=>{
+    const callbackData= req.body;
+    console.log(callbackData);
+    if(!callbackData.Body.stkCallback.CallbackMetadata){
+        console.log(callbackData.Body);
+        res.sendStatus(200)// Respond with a status of 200 to acknowledge receipt of the callback  
+    }
+
+    console.log(callbackData.Body.stkCallback.CallbackMetadata);
+    
+    const phoneNumber=callbackData.Body.stkCallback.CallbackMetadata.Item[4].Value;
+    const transaction_id=callbackData.Body.stkCallback.CallbackMetadata.Item[1].Value;
+    const amount=callbackData.Body.stkCallback.CallbackMetadata.Item[0].Value;
+
+    // console.log({phoneNumber,amount,transaction_id});
+    //initiate saving transaction information into the mongoose database
+    const payment = new Payment();
+    payment.phoneNumber = phoneNumber;
+    payment.amount = amount;
+    payment.transaction_id= transaction_id;
+    //save the info in the payment model
+    payment.save().then((data)=> {
+        console.log({message:"Saved successfully",data});
+    }).catch((err)=>{
+        console.log(err.message)
+    })
+})
 
 
 port = 8080 || process.env.PORT
